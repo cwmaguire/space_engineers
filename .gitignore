@@ -1,0 +1,16 @@
+bin\*
+.vs/WeldingRobotArm/v16/.suo
+*.dll
+*.props
+*.xml
+*.exe
+*.config
+*.pdb
+*.readme
+MDK/Bootstrapper.cs
+MDK/whitelist.cache
+obj/x64/Debug/.NETFramework,Version=v4.6.1.AssemblyAttributes.cs
+*.cache
+obj/x64/Debug/WeldingRobotArm.csproj.CopyComplete
+obj/x64/Debug/WeldingRobotArm.csproj.FileListAbsolute.txt
+Program.cs

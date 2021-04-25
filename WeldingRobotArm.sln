@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31205.134
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WeldingRobotArm", "WeldingRobotArm.csproj", "{D0984D61-A2A6-492C-A798-952B6B52972A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D0984D61-A2A6-492C-A798-952B6B52972A}.Debug|x64.ActiveCfg = Debug|x64
+		{D0984D61-A2A6-492C-A798-952B6B52972A}.Debug|x64.Build.0 = Debug|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {9B6CAB5B-B6F7-46E7-BB6B-98CA8234C8D8}
+	EndGlobalSection
+EndGlobal
