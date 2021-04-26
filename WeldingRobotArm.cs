@@ -64,15 +64,20 @@ namespace IngameScript
         public const String ROTORH1 = "RobotWelderRotor1";
         public const String ROTORV1 = "RobotWelderRotor2";
         public const String ROTORV2 = "RobotWelderRotor3";
-        public const int ROTATION_WAIT_RUNS = 10;
-        public const float DEFAULT_VELOCITY = 1.0f;
+        public const int ROTATION_WAIT_RUNS = 20;
+        public const float DEFAULT_VELOCITY = 30.0f;
 
         public int runCount = 0;
         readonly List<List<MyTuple<String, float>>> rotations = new List<List<MyTuple<String, float>>>(){
             new List<MyTuple<String, float>>{
+                    MyTuple.Create(HINGE, 0f),
+                    MyTuple.Create(ROTORH1, 90f),
+                    MyTuple.Create(ROTORV1, 0f),
+                    MyTuple.Create(ROTORV2, 0f)},
+            new List<MyTuple<String, float>>{
                     MyTuple.Create(HINGE, -20f),
                     MyTuple.Create(ROTORH1, 100f),
-                    MyTuple.Create(ROTORV1, 20f),
+                    MyTuple.Create(ROTORV1, 340f),
                     MyTuple.Create(ROTORV2, 20f)}
         };
         public bool isFinished = true;
@@ -89,7 +94,7 @@ namespace IngameScript
             if(runCount == 0) {
                 ClearLog();
             }
-            if (runCount % 10 == 0) {
+            if (runCount % ROTATION_WAIT_RUNS == 0) {
                 Log("10 ticks (or zero): (" + runCount.ToString() + ")");
             } else {
                 Log(runCount.ToString() + ",", shouldNewLine: false);
@@ -138,22 +143,74 @@ namespace IngameScript
         }
 
         public void Rotate(IMyMotorStator rotater, float target, float velocity = DEFAULT_VELOCITY) {
-            float currDegrees = Rad2Deg(rotater.Angle);
-            float currVelocity = rotater.TargetVelocityRPM;
-            Log("Rotating " + rotater.CustomName + " from " + currDegrees.ToString() + " to " + target.ToString() + " degrees at velocity " + currVelocity.ToString());
-            if (currDegrees < target) {
-                rotater.UpperLimitDeg = target;
-                rotater.LowerLimitDeg = currDegrees;
-                rotater.TargetVelocityRPM = velocity;
+            bool isHinge = IsHinge(rotater);
+            if (IsHinge(rotater)) {
+                RotateHinge(rotater, target, velocity);
             } else {
-                rotater.UpperLimitDeg = currDegrees;
-                rotater.LowerLimitDeg = target;
-                rotater.TargetVelocityRPM = -velocity;
+                RotateRotor(rotater, target, velocity);
             }
+        }
+
+        public void RotateHinge(IMyMotorStator hinge, float rawTarget, float velocity) {
+            float currDegrees = Rad2Deg(hinge.Angle);
+            //float currVelocity = hinge.TargetVelocityRPM;
+            float target = Clamp(rawTarget, 90f, -90f);
+            Log("Rotating hinge " + hinge.CustomName +
+                " from " + currDegrees.ToString() + 
+                " to " + target.ToString() + " (clamped: " + target.ToString() + ") " +
+                " degrees at velocity " + velocity.ToString());
+            if (currDegrees < target) {
+                hinge.UpperLimitDeg = target;
+                hinge.LowerLimitDeg = currDegrees;
+                hinge.TargetVelocityRPM = velocity;
+            } else {
+                hinge.UpperLimitDeg = currDegrees;
+                hinge.LowerLimitDeg = target;
+                hinge.TargetVelocityRPM = -velocity;
+            }
+        }
+
+        public void RotateRotor(IMyMotorStator rotor, float target, float velocity) {
+            float currDegrees = Rad2Deg(rotor.Angle);
+
+            if(IsBackwardsCloser(target, currDegrees)) {
+                velocity = -velocity;
+            }
+
+            Log("Rotating " + rotor.CustomName + " from " + currDegrees.ToString() + " to " + target.ToString() + " degrees at velocity " + velocity.ToString());
+            if (currDegrees < target) {
+                rotor.UpperLimitDeg = target;
+                rotor.LowerLimitDeg = currDegrees;
+                rotor.TargetVelocityRPM = velocity;
+
+                //rotor.SetValue<float>("UpperLimit", target);
+                //rotor.SetValue<float>("LowerLimit", -361f);
+                //rotor.SetValue<float>("Velocity", velocity);
+            } else {
+                rotor.UpperLimitDeg = currDegrees;
+                rotor.LowerLimitDeg = target;
+                rotor.TargetVelocityRPM = -velocity;
+                //rotor.SetValue<float>("UpperLimit", target);
+                //rotor.SetValue<float>("LowerLimit", -361f);
+                //rotor.SetValue<float>("Velocity", -velocity);
+            }
+        }
+
+        public bool IsBackwardsCloser(float targetDegrees, float currentDegrees) {
+            return Math.Abs(targetDegrees - currentDegrees) > 180f;
         }
 
         public float Rad2Deg(float radians) {
             return radians * (DEGREES_PER_RADIAN / (float) Math.PI);
+        }
+
+        public float Clamp(float toClamp, float Max, float Min) {
+            return Math.Min(90f, Math.Max(-90f, toClamp));
+        }
+
+        public bool IsHinge(IMyMotorStator motor) {
+            // TODO: find a better way to do this. SE doesn't seem to allow type comparisons
+            return motor.CustomName.Contains("Hinge");
         }
 
         public void Log(String text, bool shouldAppend = true, bool shouldNewLine = true) {
