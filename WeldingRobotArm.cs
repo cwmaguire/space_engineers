@@ -1,5 +1,5 @@
-﻿using Sandbox.Game.EntityComponents;
-using Sandbox.ModAPI.Ingame;
+﻿using Sandbox.ModAPI.Ingame;
+using Sandbox.Game.EntityComponents;
 using Sandbox.ModAPI.Interfaces;
 using SpaceEngineers.Game.ModAPI.Ingame;
 using System;
@@ -45,6 +45,7 @@ namespace IngameScript
 
         public Program()
         {
+            Log("Compiling Welding Robot Arm script. runCount = " + runCount.ToString());
             Runtime.UpdateFrequency = UpdateFrequency.Update100;
         }
 
@@ -60,30 +61,62 @@ namespace IngameScript
         public const float DEGREES_PER_RADIAN = 180f;
         public const String LOGGING_PANEL_NAME = "Welder Logging Panel";
         public const String BOTTOM = "HingeWelderBottom";
-        public const String TOP = "HingeWelderTOP";
+        public const String TOP = "HingeWelderTop";
         public const String ROTOR = "RobotWelderRotor";
-
-        List<List<MyTuple<String, float>>> rotations = new List<List<MyTuple<String, float>>>(){
+        public const int ROTATION_WAIT_RUNS = 10;
+        public StringBuilder logMsg = new StringBuilder();
+        public int runCount = 0;
+        readonly List<List<MyTuple<String, float>>> rotations = new List<List<MyTuple<String, float>>>(){
             new List<MyTuple<String, float>>{
                     MyTuple.Create(ROTOR, 90f),
                     MyTuple.Create(BOTTOM, 0f),
                     MyTuple.Create(TOP, 0f)},
             new List<MyTuple<String, float>>{
-                    MyTuple.Create(ROTOR, 90f),
-                    MyTuple.Create(BOTTOM, 0f),
-                    MyTuple.Create(TOP, 0f)}
+                    MyTuple.Create(ROTOR, 100f),
+                    MyTuple.Create(BOTTOM, 10f),
+                    MyTuple.Create(TOP, 20f)}
         };
+        public bool isFinished = true;
 
         public void Main(string argument, UpdateType updateSource) {
-            IMyTextSurface logPanel = SetupLogging();
+            if (ShouldStop(updateSource)) {
+                Log("Stopping because finished.");
+                Runtime.UpdateFrequency = UpdateFrequency.None;
+                return;
+            } else {
+                Runtime.UpdateFrequency = UpdateFrequency.Update100;
+                isFinished = false;
+            }
+            if(runCount == 0) {
+                ClearLog();
+            }
+            if (runCount % 10 == 0) {
+                Log("10 ticks (or zero): (" + runCount.ToString() + ")");
+            } else {
+                Log(runCount.ToString() + ",", shouldNewLine: false);
+                runCount++;
+                return;
+            }
+            int currentRotationsList = runCount / ROTATION_WAIT_RUNS;
+            if (currentRotationsList > rotations.LongCount() - 1) {
+                Log("Finished rotation list; setting isFinished to true.");
+                isFinished = true;
+                runCount = 0;
+                return;
+            }
+            Log("Running rotations " + currentRotationsList.ToString());
+            Rotate(rotations[currentRotationsList]);
+            runCount++;
+        }
 
-            List<MyTuple<IMyMotorStator, float>> rotations =
-                new List<MyTuple<IMyMotorStator, float>> {
-                    MyTuple.Create((IMyMotorStator)rotor, 90f),
-                    MyTuple.Create(bottom, 0f),
-                    MyTuple.Create(top, 0f)
-                };
-            Rotate(rotations);
+        public bool ShouldStop(UpdateType updateSource) {
+            UpdateType manualRun = UpdateType.None | UpdateType.Terminal;
+            bool isManualRun = (updateSource & manualRun) != 0;
+            //Log("Is manual run? " + isManualRun.ToString() + "; " +
+            //    "is None? " + (updateSource == 0).ToString() + "; " +
+            //    "is terminal? " + (updateSource == UpdateType.Terminal).ToString() + "; " +
+            //    "update type: " + updateSource.ToString());
+            return isFinished && !isManualRun;
         }
 
         public IMyTextSurface SetupLogging() {
@@ -97,36 +130,43 @@ namespace IngameScript
             return GridTerminalSystem.GetBlockWithName(name);
         }
 
-        public void Rotate(List<MyTuple<IMyMotorStator, float>> rotations) {
+        public void Rotate(List<MyTuple<String, float>> rotations) {
+            IMyMotorStator rotater;
             foreach (var rotation in rotations) {
-                Rotate(rotation);
+                rotater = (IMyMotorStator)GetBlock(rotation.Item1);
+                Rotate(rotater, rotation.Item2);
             }
         }
 
-        public void Rotate(MyTuple<IMyMotorStator, float> rotation) {
-            Rotate(rotation.Item1, rotation.Item2);
-        }
-
-        public void Rotate(IMyMotorStator rotater, float target, float velocity = 1.0f) {
-            log("Rotating " + rotater.CustomName + " to " + target.ToString() + " degrees");
-            rotater.UpperLimitDeg = target;
-            rotater.LowerLimitDeg = target;
-            float degrees = rad2deg(rotater.Angle);
-            if (degrees > target) {
+        public void Rotate(IMyMotorStator rotater, float target, float velocity = 0.2f) {
+            float degrees = Rad2Deg(rotater.Angle);
+            Log("Rotating " + rotater.CustomName + " from " + degrees.ToString() + " to " + target.ToString() + " degrees");
+            if (degrees < target) {
+                rotater.UpperLimitDeg = target;
+                rotater.LowerLimitDeg = degrees;
+                rotater.TargetVelocityRPM = velocity;
+            } else {
+                rotater.UpperLimitDeg = degrees;
+                rotater.LowerLimitDeg = target;
                 rotater.TargetVelocityRPM = -velocity;
             }
-            else {
-                rotater.TargetVelocityRPM = velocity;
-            }
         }
 
-        public float rad2deg(float radians) {
+        public float Rad2Deg(float radians) {
             return radians * DEGREES_PER_RADIAN;
         }
 
-        public void log(String text) {
-            IMyTextSurface textPanel = (IMyTextSurface)GetBlock(LOGGING_PANEL_NAME);
-            textPanel.WriteText(text + "\n", true);
+        public void Log(String text, bool shouldAppend = true, bool shouldNewLine = true) {
+            IMyTextSurface logPanel = (IMyTextSurface)GetBlock(LOGGING_PANEL_NAME);
+            logPanel.ContentType = ContentType.TEXT_AND_IMAGE;
+            String maybeNewLine = shouldNewLine ? "\n" : "";
+            logPanel.WriteText(text + maybeNewLine, shouldAppend);
+        }
+
+        public void ClearLog() {
+            IMyTextSurface logPanel = (IMyTextSurface)GetBlock(LOGGING_PANEL_NAME);
+            logPanel.ContentType = ContentType.TEXT_AND_IMAGE;
+            logPanel.WriteText("");
         }
     }
 }
