@@ -60,21 +60,20 @@ namespace IngameScript
 
         public const float DEGREES_PER_RADIAN = 180f;
         public const String LOGGING_PANEL_NAME = "Welder Logging Panel";
-        public const String BOTTOM = "HingeWelderBottom";
-        public const String TOP = "HingeWelderTop";
-        public const String ROTOR = "RobotWelderRotor";
+        public const String HINGE = "RobotWelderHinge";
+        public const String ROTORH1 = "RobotWelderRotor1";
+        public const String ROTORV1 = "RobotWelderRotor2";
+        public const String ROTORV2 = "RobotWelderRotor3";
         public const int ROTATION_WAIT_RUNS = 10;
-        public StringBuilder logMsg = new StringBuilder();
+        public const float DEFAULT_VELOCITY = 1.0f;
+
         public int runCount = 0;
         readonly List<List<MyTuple<String, float>>> rotations = new List<List<MyTuple<String, float>>>(){
             new List<MyTuple<String, float>>{
-                    MyTuple.Create(ROTOR, 90f),
-                    MyTuple.Create(BOTTOM, 0f),
-                    MyTuple.Create(TOP, 0f)},
-            new List<MyTuple<String, float>>{
-                    MyTuple.Create(ROTOR, 100f),
-                    MyTuple.Create(BOTTOM, 10f),
-                    MyTuple.Create(TOP, 20f)}
+                    MyTuple.Create(HINGE, -20f),
+                    MyTuple.Create(ROTORH1, 100f),
+                    MyTuple.Create(ROTORV1, 20f),
+                    MyTuple.Create(ROTORV2, 20f)}
         };
         public bool isFinished = true;
 
@@ -138,22 +137,23 @@ namespace IngameScript
             }
         }
 
-        public void Rotate(IMyMotorStator rotater, float target, float velocity = 0.2f) {
-            float degrees = Rad2Deg(rotater.Angle);
-            Log("Rotating " + rotater.CustomName + " from " + degrees.ToString() + " to " + target.ToString() + " degrees");
-            if (degrees < target) {
+        public void Rotate(IMyMotorStator rotater, float target, float velocity = DEFAULT_VELOCITY) {
+            float currDegrees = Rad2Deg(rotater.Angle);
+            float currVelocity = rotater.TargetVelocityRPM;
+            Log("Rotating " + rotater.CustomName + " from " + currDegrees.ToString() + " to " + target.ToString() + " degrees at velocity " + currVelocity.ToString());
+            if (currDegrees < target) {
                 rotater.UpperLimitDeg = target;
-                rotater.LowerLimitDeg = degrees;
+                rotater.LowerLimitDeg = currDegrees;
                 rotater.TargetVelocityRPM = velocity;
             } else {
-                rotater.UpperLimitDeg = degrees;
+                rotater.UpperLimitDeg = currDegrees;
                 rotater.LowerLimitDeg = target;
                 rotater.TargetVelocityRPM = -velocity;
             }
         }
 
         public float Rad2Deg(float radians) {
-            return radians * DEGREES_PER_RADIAN;
+            return radians * (DEGREES_PER_RADIAN / (float) Math.PI);
         }
 
         public void Log(String text, bool shouldAppend = true, bool shouldNewLine = true) {
