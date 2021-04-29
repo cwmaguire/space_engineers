@@ -58,6 +58,11 @@ namespace IngameScript
             // needed.
         }
 
+        // Example of old-school setter:
+        // rotor.SetValue<float>("UpperLimit", target);
+        // However, rotors are, oddly enough, IMyMotorStator, not IMyMotorRotor;
+        // IMyMotorStator has built-in properties whereas IMyMotorRotor does not.
+
         public const float DEGREES_PER_RADIAN = 180f;
         public const String LOGGING_PANEL_NAME = "Welder Logging Panel";
         public const String HINGE = "RobotWelderHinge";
@@ -65,22 +70,25 @@ namespace IngameScript
         public const String ROTORV1 = "RobotWelderRotor2";
         public const String ROTORV2 = "RobotWelderRotor3";
         public const int ROTATION_WAIT_RUNS = 20;
-        public const float DEFAULT_VELOCITY = 30.0f;
+        public const float DEFAULT_VELOCITY = 10f;
 
         public int runCount = 0;
+        public List<List<MyTuple<String, float>>> resetRotations;
         readonly List<List<MyTuple<String, float>>> rotations = new List<List<MyTuple<String, float>>>(){
-            new List<MyTuple<String, float>>{
-                    MyTuple.Create(HINGE, 0f),
-                    MyTuple.Create(ROTORH1, 90f),
-                    MyTuple.Create(ROTORV1, 0f),
-                    MyTuple.Create(ROTORV2, 0f)},
-            new List<MyTuple<String, float>>{
-                    MyTuple.Create(HINGE, -20f),
-                    MyTuple.Create(ROTORH1, 100f),
-                    MyTuple.Create(ROTORV1, 340f),
-                    MyTuple.Create(ROTORV2, 20f)}
+            //new List<MyTuple<String, float>>{
+            //        MyTuple.Create(HINGE, 0f),
+            //        MyTuple.Create(ROTORH1, 90f),
+            //        MyTuple.Create(ROTORV1, 0f),
+            //        MyTuple.Create(ROTORV2, 0f)},
+            //new List<MyTuple<String, float>>{
+            //        MyTuple.Create(ROTORH1, 100f),
+            //        MyTuple.Create(ROTORV2, 75f)},
+            //new List<MyTuple<String, float>>{
+            //        MyTuple.Create(HINGE, 15f),
+            //        MyTuple.Create(ROTORV1, -15f)}
         };
         public bool isFinished = true;
+        public bool isResetFinished = false;
 
         public void Main(string argument, UpdateType updateSource) {
             if (ShouldStop(updateSource)) {
@@ -91,33 +99,52 @@ namespace IngameScript
                 Runtime.UpdateFrequency = UpdateFrequency.Update100;
                 isFinished = false;
             }
-            if(runCount == 0) {
+            if(runCount == 0 && !isResetFinished) {
                 ClearLog();
             }
             if (runCount % ROTATION_WAIT_RUNS == 0) {
-                Log("10 ticks (or zero): (" + runCount.ToString() + ")");
+                Log(ROTATION_WAIT_RUNS.ToString() + " ticks (or zero): (" + runCount.ToString() + ")");
             } else {
                 Log(runCount.ToString() + ",", shouldNewLine: false);
                 runCount++;
                 return;
             }
+
             int currentRotationsList = runCount / ROTATION_WAIT_RUNS;
-            if (currentRotationsList > rotations.LongCount() - 1) {
-                Log("Finished rotation list; setting isFinished to true.");
-                isFinished = true;
-                runCount = 0;
-                return;
+
+            if (isResetFinished) {
+                if (currentRotationsList > rotations.LongCount() - 1) {
+                    Log("Finished rotation list; setting isFinished to true.");
+                    isFinished = true;
+                    isResetFinished = false;
+                    runCount = 0;
+                    return;
+                }
+                Log("Running rotations " + currentRotationsList.ToString());
+                Rotate(rotations[currentRotationsList]);
+            } else {
+                if(runCount == 0) {
+                    resetRotations = ResetRobotSafely();
+                }
+                if (currentRotationsList > resetRotations.LongCount() - 1) {
+                    Log("Finished reset rotation list; setting runCount to 0 and isResetFinished to true.");
+                    isResetFinished = true;
+                    resetRotations = null;
+                    runCount = 0;
+                    return;
+                }
+                Log("Running reset rotations " + currentRotationsList.ToString());
+                Rotate(resetRotations[currentRotationsList]);
             }
-            Log("Running rotations " + currentRotationsList.ToString());
-            Rotate(rotations[currentRotationsList]);
             runCount++;
         }
 
         public bool ShouldStop(UpdateType updateSource) {
-            UpdateType manualRun = UpdateType.None | UpdateType.Terminal;
+            UpdateType manualRun = UpdateType.None | UpdateType.Terminal | UpdateType.Trigger;
             bool isManualRun = (updateSource & manualRun) != 0;
             //Log("Is manual run? " + isManualRun.ToString() + "; " +
             //    "is None? " + (updateSource == 0).ToString() + "; " +
+            //    "is trigger? " + (updateSource == UpdateType.Trigger).ToString() + "; " +
             //    "is terminal? " + (updateSource == UpdateType.Terminal).ToString() + "; " +
             //    "update type: " + updateSource.ToString());
             return isFinished && !isManualRun;
@@ -128,6 +155,42 @@ namespace IngameScript
             logPanel.ContentType = ContentType.TEXT_AND_IMAGE;
             logPanel.WriteText("");
             return logPanel;
+        }
+
+        public List<List<MyTuple<String, float>>> ResetRobotSafely() {
+            return new List<List<MyTuple<String, float>>>() {
+            // Move arm 1 back to origin while moving the other arms to stay relatively still
+                ResetArm1(),
+                ResetArm2(),
+                ResetArm3()
+            };
+        }
+
+        // I need to return the arms back to origin without banging into anything; if I move arm 2 in the opposite way from arm 1 then they
+        // should start to "scissor" together. At the same time, I need to move arm three in the _opposite_ direction, since the angle of arm 2 is changing.
+        // Arm 3 will try to stay at the same angle 
+
+        // Or, I could "straighten out" if I've got wide angles (e.g. arm 2 is > 90 deg from arm 1)
+        // or "curl up" if I've got narrow angles
+        public List<MyTuple<String, float>> ResetArm1() {
+            // if arm 2 is > 90 away from arm 1 then we're extended, so fully extend by going to -180
+            // else we've got a very sharp elbow formed by arms 1 and 2 and we should take arm 2 back towards 0/360
+            
+            return new List<MyTuple<String, float>>() {
+                MyTuple.Create(HINGE, 0f),
+            };
+        }
+        public List<MyTuple<String, float>> ResetArm2() {
+            return new List<MyTuple<String, float>>() {
+
+            };
+
+        }
+        public List<MyTuple<String, float>> ResetArm3() {
+            return new List<MyTuple<String, float>>() {
+
+            };
+
         }
 
         public IMyEntity GetBlock(String name) {
@@ -173,32 +236,34 @@ namespace IngameScript
         public void RotateRotor(IMyMotorStator rotor, float target, float velocity) {
             float currDegrees = Rad2Deg(rotor.Angle);
 
-            if(IsBackwardsCloser(target, currDegrees)) {
-                velocity = -velocity;
-            }
-
-            Log("Rotating " + rotor.CustomName + " from " + currDegrees.ToString() + " to " + target.ToString() + " degrees at velocity " + velocity.ToString());
+            Log("Rotating " + rotor.CustomName +
+                " from " + currDegrees.ToString() +
+                " to " + target.ToString() +
+                " degrees at velocity " + velocity.ToString());
             if (currDegrees < target) {
                 rotor.UpperLimitDeg = target;
                 rotor.LowerLimitDeg = currDegrees;
                 rotor.TargetVelocityRPM = velocity;
-
-                //rotor.SetValue<float>("UpperLimit", target);
-                //rotor.SetValue<float>("LowerLimit", -361f);
-                //rotor.SetValue<float>("Velocity", velocity);
             } else {
                 rotor.UpperLimitDeg = currDegrees;
                 rotor.LowerLimitDeg = target;
                 rotor.TargetVelocityRPM = -velocity;
-                //rotor.SetValue<float>("UpperLimit", target);
-                //rotor.SetValue<float>("LowerLimit", -361f);
-                //rotor.SetValue<float>("Velocity", -velocity);
             }
         }
 
-        public bool IsBackwardsCloser(float targetDegrees, float currentDegrees) {
-            return Math.Abs(targetDegrees - currentDegrees) > 180f;
-        }
+        //public bool IsBackwardsCloser(float targetDegrees, float currentDegrees) {
+        //    float correctedTargetDegrees = AbsDegrees(targetDegrees);
+        //    float correctedCurrentDegrees = AbsDegrees(currentDegrees);
+        //    return Math.Abs(correctedTargetDegrees - correctedCurrentDegrees) > 180f;
+        //}
+
+        //public float AbsDegrees(float degrees) {
+        //    if (degrees < 0) {
+        //        return 360f + degrees;
+        //    } else {
+        //        return degrees;
+        //    }
+        //}
 
         public float Rad2Deg(float radians) {
             return radians * (DEGREES_PER_RADIAN / (float) Math.PI);
