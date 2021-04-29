@@ -82,9 +82,10 @@ namespace IngameScript {
             String lowerLimit = MaybeLimit(rotorOrHinge.LowerLimitDeg);
             String velocity = rotorOrHinge.TargetVelocityRPM.ToString("0.00").PadLeft(6);
             String angle = Rad2Deg(rotorOrHinge.Angle).ToString("0.00").PadLeft(6);
-            String torque = rotorOrHinge.Torque.ToString("0.00").PadLeft(6);
+            String torque = rotorOrHinge.Torque.ToString("0.00").PadLeft(6).PadLeft(90);
+            String Limits = "[" + lowerLimit + ", " + upperLimit + "]";
 
-            Log(name + ":\n  " + angle + ", " + velocity + "\n" + torque + "\n[" + lowerLimit + ", " + upperLimit + "]");
+            Log(name.PadRight(25) + angle + ", " + velocity + "\n" + torque + "\n" + Limits.PadLeft(90));
         }
 
         public String MaybeLimit(float limit) {
